@@ -30,7 +30,7 @@ $WarningPreference = 'Continue'
 $VerbosePreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Continue'
 
-# Sctual bot logic goes here inside $script={}. This is a script block which is called in the main loop.
+# Actual bot logic goes here inside $script={}. This is a script block which is called in the main loop.
 # More info about script blocks: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_script_blocks?view=powershell-7.2
 # try not to look beyond this block 
 $Script = {
@@ -48,24 +48,26 @@ $Script = {
             Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "Hi $($ChannelMessage.author.username)" 
         ) : $null
 
-        $ChannelMessage.content -like '*burger*' ? ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "I like burgers.`nMmmmm!" ) : $null
+        $ChannelMessage.content -like '*burger*' ? ( 
+            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "I like burgers.`nMmmmm!" 
+        ) : $null
 
         # This function-thingy looks up ip addresses from domain names
-        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match $RegexTable['domain'] ? (
-            ( $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length)-7) ) &&
-            ( $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query,country,isp ) &&
-            ( $IPAddresses | ForEach-Object -Begin {$string = ""} -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" } ) &&
-            ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string" )
-        ) : $null
+        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match $RegexTable['domain'] ? (&{
+            $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length)-7) 
+            $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query,country,isp
+            $IPAddresses | ForEach-Object -Begin {$string = ""} -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" }
+            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
+        }) : $null
 
         # this thingy looks up ip addresses using ip-api.com free api. See below function Get-IPInfo which is in this script to see how it works
-        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) -match $RegexTable['ip4address'] ? (
-            ( $LookupValue = $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) ) &&
-            ( $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP ) &&
-            ( $prop = $IPLookup | get-member -MemberType NoteProperty ) &&
-            ( $prop | ForEach-Object -Begin {$string = ""} -Process  { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n"} ) &&
-            ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string" )
-        ) : $null
+        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) -match $RegexTable['ip4address'] ? (&{
+            $LookupValue = $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9)
+            $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP
+            $prop = $IPLookup | get-member -MemberType NoteProperty
+            $prop | ForEach-Object -Begin {$string = ""} -Process  { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n"}
+            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
+        }) : $null
 
     }
     catch {
