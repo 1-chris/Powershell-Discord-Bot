@@ -14,6 +14,16 @@ $BotId = ""
 # below chosen allows the bot to receive direct messages and discord server messages
 $BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
 
+$RegexTable @{
+    'domain' = "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$"
+    'ip4address' = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
+}
+
+$Headers = @{
+    "Authorization" = "Bot $BotToken"; 
+    "User-Agent" = "PSDCBot (blabla, v0.1)";
+}
+
 # Various powershell preference settings useful for debugging and decluttering as needed
 $InformationPreference = 'Continue'
 $WarningPreference = 'Continue'
@@ -25,7 +35,7 @@ $ErrorActionPreference = 'Continue'
 # try not to look beyond this block 
 $Script = {
     # Write the chat messages to the terminal
-    $RecvObj.EventName -eq "MESSAGE_CREATE" ? (Write-ChatMessage -ChannelMessage $RecvObj.Data) : $null
+    $RecvObj.EventName -eq "MESSAGE_CREATE" ? ( Write-ChatMessage -ChannelMessage $RecvObj.Data ) : $null
 
     # Simplified name object for channel messages, filters out bots own messages 
     # Note - Typical properties for $ChannelMessage: type, tts, timestamp, referenced_message, pinned, nonce, mentions, mention_roles, mention_everyone, id, flags, embeds, edited_timestamp, content, components, channel_id, author, attachments
@@ -34,20 +44,22 @@ $Script = {
     # These try/catch/finally things are for error handling. More info: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_try_catch_finally?view=powershell-7.2
     try {
         # Instead of if statements we are using the ternery operator for either worse or simpler code idk. Info here: https://docs.microsoft.com/en-us/powershell/scripting/whats-new/what-s-new-in-powershell-70?view=powershell-7.2#ternary-operator
-        $ChannelMessage.content -like 'hi*' -or $ChannelMessage.content -like 'hello*' ? ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "Hi $($ChannelMessage.author.username)" ) : $null
+        $ChannelMessage.content -like 'hi*' -or $ChannelMessage.content -like 'hello*' ? ( 
+            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "Hi $($ChannelMessage.author.username)" 
+        ) : $null
 
         $ChannelMessage.content -like '*burger*' ? ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "I like burgers.`nMmmmm!" ) : $null
 
         # This function-thingy looks up ip addresses from domain names
-        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$" ? (
-            ( $LookupValue = $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) ) &&
+        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match $RegexTable['domain'] ? (
+            ( $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length)-7) ) &&
             ( $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query,country,isp ) &&
             ( $IPAddresses | ForEach-Object { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" } ) &&
             ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string" )
         ) : $null
 
         # this thingy looks up ip addresses using ip-api.com free api. See below function Get-IPInfo which is in this script to see how it works
-        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) -match "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$" ? (
+        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) -match $RegexTable['ip4address'] ? (
             ( $LookupValue = $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) ) &&
             ( $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP ) &&
             ( $prop = $IPLookup | get-member -MemberType NoteProperty ) &&
@@ -86,6 +98,32 @@ function Write-ChatMessage {
     }
 }
 
+
+# generic function to simplifer other functions
+function Send-DiscordWebSocketData {
+    [cmdletbinding()]
+    param( $Data )
+    
+    $success = $false
+    
+    try {
+        $Message = $Data | ConvertTo-Json
+        $Array = @()
+        $Message.ToCharArray() | ForEach-Object { $Array += [byte]$_ }
+        $Message = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
+        $Conn = $WS.SendAsync($Message, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
+        while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 50 }
+        $success = $true
+    }
+    
+    catch {
+        Write-Error "Send-DiscordWebSocketData error: $($PSItem.Exception.Message)"
+    }
+
+    return ($Data | Select-Object @{N="SentOrRecvd";E={if($success){"Sent"}else{"Failed"}}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}}))
+
+}
+
 # discord needs regular heartbeat to stay connected. needs simplifying
 function Send-DiscordHeartbeat
 {
@@ -94,14 +132,9 @@ function Send-DiscordHeartbeat
     param( [int]$SequenceNumber = $SequenceNumber -is [int] -and $SequenceNumber -eq 0 ? ((Remove-Variable SequenceNumber -ErrorAction SilentlyContinue) && $null) : $SequenceNumber -isnot [int] -and $null -ne $SequenceNumber ? [int]$SequenceNumber : $SequenceNumber )
     
     $Prop = @{ 'op' = 1; 'd' = $SequenceNumber }
-    $Message = $Prop | ConvertTo-Json
-    $Array = @()
-    $Message.ToCharArray() | ForEach-Object { $Array += [byte]$_ }
-    $Message = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
-
-    $Conn = $WS.SendAsync($Message, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
-    while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 50 }
-    return ($Prop | Select-Object @{N="SentOrRecvd";E={"Sent"}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}})
+    $result = Send-DiscordWebSocketData -Data $Prop
+    
+    return $result
 }
 
 # this does weird bitwise shift left stuff that i don't really understand but i managed to make it work anyway
@@ -151,15 +184,8 @@ function Send-DiscordAuthentication
         }
     }
 
-    $Message = $Prop | ConvertTo-Json
-            
-    $Array = @()
-    $Message.ToCharArray() | ForEach-Object { $Array += [byte]$_ }          
-    $Message = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
-
-    $Conn = $WS.SendAsync($Message, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
-    while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 50 }
-    return ($Prop | Select-Object @{N="SentOrRecvd";E={"Sent"}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}})
+    $result = Send-DiscordWebSocketData -Data $Prop
+    return $result
 }
 
 # used to simplify sending discord message in above script block
@@ -169,13 +195,8 @@ function Send-DiscordMessage
     param(
         $Token = $BotToken,
         $ChannelId,
-        [string]$Content
-        
+        [string]$Content   
     )
-    $Headers = @{
-        "Authorization" = "Bot $BotToken"; 
-        "User-Agent" = "PSDCBot (blabla, v0.1)";
-    }
 
     $Body = @{
         "content" = "$Content"
