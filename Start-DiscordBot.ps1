@@ -14,14 +14,14 @@ $BotId = ""
 # below chosen allows the bot to receive direct messages and discord server messages
 $BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
 
-$RegexTable @{
+$RegexTable = @{
     'domain' = "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$"
     'ip4address' = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
 }
 
 $Headers = @{
-    "Authorization" = "Bot $BotToken"; 
-    "User-Agent" = "PSDCBot (blabla, v0.1)";
+    "Authorization" = "Bot $BotToken"
+    "User-Agent" = "PSDCBot (blabla, v0.1)"
 }
 
 # Various powershell preference settings useful for debugging and decluttering as needed
@@ -127,8 +127,8 @@ function Send-DiscordWebSocketData {
     catch {
         Write-Error "Send-DiscordWebSocketData error: $($PSItem.Exception.Message)"
     }
-
-    return ($Data | Select-Object @{N="SentOrRecvd";E={if($success){"Sent"}else{"Failed"}}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}}))
+    $msg = if($success){"Sent"}else{"SendFailed"}
+    return ($Data | Select-Object @{N="SentOrRecvd";E={$msg}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}})
 
 }
 
