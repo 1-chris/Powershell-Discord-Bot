@@ -54,7 +54,7 @@ $Script = {
         $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match $RegexTable['domain'] ? (
             ( $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length)-7) ) &&
             ( $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query,country,isp ) &&
-            ( $IPAddresses | ForEach-Object { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" } ) &&
+            ( $IPAddresses | ForEach-Object -Begin {$string = ""} -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" } ) &&
             ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string" )
         ) : $null
 
@@ -63,7 +63,7 @@ $Script = {
             ( $LookupValue = $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) ) &&
             ( $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP ) &&
             ( $prop = $IPLookup | get-member -MemberType NoteProperty ) &&
-            ( $prop | ForEach-Object { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n"} ) &&
+            ( $prop | ForEach-Object -Begin {$string = ""} -Process  { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n"} ) &&
             ( Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string" )
         ) : $null
 
