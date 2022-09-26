@@ -4,14 +4,15 @@
 
 # Put in your Bot token
 # You can get one here: https://discord.com/developers/applications
-# dont leak your bot token
+# Don't leak your bot token
 $BotToken = ""
 
 # Put in YOUR bot id or it will try to respond to itself
 $BotId = ""
 
-# choose your intent permissions: https://discord.com/developers/docs/topics/gateway#gateway-intents
-# below chosen allows the bot to receive direct messages and discord server messages
+# Choose your intent permissions: https://discord.com/developers/docs/topics/gateway#gateway-intents
+# Below chosen allows the bot to receive direct messages and discord server messages
+# WARNING: This may not work anymore. I believe there have been recent changes in how gateway intents work.
 $BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
 
 $RegexTable = @{
@@ -32,7 +33,6 @@ $ErrorActionPreference = 'Continue'
 
 # Actual bot logic goes here inside $script={}. This is a script block which is called in the main loop.
 # More info about script blocks: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_script_blocks?view=powershell-7.2
-# try not to look beyond this block 
 $Script = {
     # Write the chat messages to the terminal
     $RecvObj.EventName -eq "MESSAGE_CREATE" ? ( Write-ChatMessage -ChannelMessage $RecvObj.Data ) : $null
@@ -91,7 +91,6 @@ function Get-IPInfo {
     return $Collection
 }
 
-# This function just generates a fancy line on the screen using someones function i found online called 'write-color'
 function Write-ChatMessage {
     [cmdletbinding()]
     param( $ChannelMessage )
@@ -102,14 +101,13 @@ function Write-ChatMessage {
     $Content = $ChannelMessage.content -Replace "`n", " "
     
     if ((-not [string]::IsNullOrEmpty($ChannelMessage.content)) -Or (-not [string]::IsNullOrWhiteSpace($ChannelMessage.content))) {
-        # Write-Color "<", "$Timestamp", " - ", "$Username $UserId", "> ", "$Content" -C Magenta, Green, Green, Green, Magenta, White
         Write-Host -NoNewLine -ForegroundColor Magenta "<$Timestamp - $Username $UserId> "
         Write-Host -NoNewLine -ForegroundColor White "$Content`n"
     }
 }
 
 
-# generic function to simplifer other functions
+# Generic function to simplify discord websocket calls
 function Send-DiscordWebSocketData {
     [cmdletbinding()]
     param( $Data )
@@ -134,7 +132,7 @@ function Send-DiscordWebSocketData {
 
 }
 
-# discord needs regular heartbeat to stay connected. needs simplifying
+# Discord needs regular heartbeat to keep the websocket connected. Could use simplifying
 function Send-DiscordHeartbeat
 {
     [cmdletbinding()]
@@ -147,9 +145,8 @@ function Send-DiscordHeartbeat
     return $result
 }
 
-# this does weird bitwise shift left stuff that i don't really understand but i managed to make it work anyway
-# without correct intents set you will not receive the notifications you want from the gateway websocket
-# more info: https://discord.com/developers/docs/topics/gateway#gateway-intents
+# I am not entirely sure how it works but it did.
+# More info: https://discord.com/developers/docs/topics/gateway#gateway-intents
 function Send-DiscordAuthentication
 {
     [cmdletbinding()]
@@ -177,7 +174,7 @@ function Send-DiscordAuthentication
     }
 
     foreach ($key in $Intents) {
-        # this is being set by looping through and, using a ternary operator like above
+        # this is being set by looping through and, using a ternary operator like above. Actually reading this again I'm confused.
         $IntentsCalculation = $IntentsCalculation -eq $IntentsKeys[$key] ? $IntentsKeys[$key] : ( $IntentsCalculation + $IntentsKeys[$key] )
     }
 
@@ -247,8 +244,6 @@ try{
         
             $LogStore += $DiscordData 
 
-            # we are using select-object calculated properties to make it easier to refer to information
-            # more info about calculated properties: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_calculated_properties?view=powershell-7.2
             try { $RecvObj = $DiscordData | ConvertFrom-Json | Select-Object @{N="SentOrRecvd";E={"Received"}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}} }
             catch {  Write-Error "ConvertFrom-Json failed $_.Exception"; Write-Host "Data: $RecvObj"; $RecvObj = $null;}
         
@@ -271,7 +266,7 @@ try{
                 $SequenceNumber = [int]$RecvObj.SequenceNumber 
             }
 
-            # honestly don't know why i did this weird shit
+            # Getting the time between when each heartbeat should be sent
             $CurrentEpochMS = [int64]((New-TimeSpan -Start (Get-Date "01/01/1970") -End (Get-Date)).TotalMilliseconds)
             if($CurrentEpochMS -ge ($NextHeartbeat)) {
                 Write-Verbose "Sending next heartbeat - $CurrentEpochMS >= $NextHeartbeat."
@@ -286,16 +281,15 @@ try{
                 Send-DiscordAuthentication -Token $BotToken -Intents $BotIntents | Out-Null #| Format-Table
                 Write-Information "Successfully authenticated to Discord Gateway."
             }
-
+            # opcode 9 is invalid session. Not sure how to stop this from regularly occuring
             if($RecvObj.Opcode -eq '9') { 
-                # you will see below warning often idk how to fix
                 Write-Warning "Session invalidated from opcode 9 received. Reauthenticating..."
                 Send-DiscordAuthentication -Token $BotToken -Intents $BotIntents | Out-Null #| Format-Table 
                 Write-Information "Successfully authenticated to Discord Gateway."
             }
             #endregion misc-code
 
-            # this is where we are calling the script block which is closer to the start of the script
+            # Below we are calling the script block which is defined near the beggining of this script
             &$Script
 
         }
