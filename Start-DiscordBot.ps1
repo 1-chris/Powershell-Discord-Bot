@@ -16,13 +16,13 @@ $BotId = ""
 $BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
 
 $RegexTable = @{
-    'domain' = "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$"
+    'domain'     = "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$"
     'ip4address' = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
 }
 
 $Headers = @{
     "Authorization" = "Bot $BotToken"
-    "User-Agent" = "PSDCBot (blabla, v0.1)"
+    "User-Agent"    = "PSDCBot (blabla, v0.1)"
 }
 
 # Various powershell preference settings useful for debugging and decluttering as needed
@@ -39,7 +39,7 @@ $Script = {
 
     # Simplified name object for channel messages, filters out bots own messages 
     # Note - Typical properties for $ChannelMessage: type, tts, timestamp, referenced_message, pinned, nonce, mentions, mention_roles, mention_everyone, id, flags, embeds, edited_timestamp, content, components, channel_id, author, attachments
-    $ChannelMessage = if($RecvObj.EventName -eq "MESSAGE_CREATE") { $RecvObj.Data | Where-Object {$_.author.id -ne $BotId} }
+    $ChannelMessage = if ($RecvObj.EventName -eq "MESSAGE_CREATE") { $RecvObj.Data | Where-Object { $_.author.id -ne $BotId } }
     
     # These try/catch/finally things are for error handling. More info: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_try_catch_finally?view=powershell-7.2
     try {
@@ -53,21 +53,21 @@ $Script = {
         ) : $null
 
         # This function-thingy looks up ip addresses from domain names
-        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7,($ChannelMessage.content.Length)-7) -match $RegexTable['domain'] ? (&{
-            $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length)-7) 
-            $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query,country,isp
-            $IPAddresses | ForEach-Object -Begin {$string = ""} -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" }
-            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
-        }) : $null
+        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length) - 7) -match $RegexTable['domain'] ? (& {
+                $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length) - 7) 
+                $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query, country, isp
+                $IPAddresses | ForEach-Object -Begin { $string = "" } -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" }
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
+            }) : $null
 
         # this thingy looks up ip addresses using ip-api.com free api. See below function Get-IPInfo which is in this script to see how it works
-        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9) -match $RegexTable['ip4address'] ? (&{
-            $LookupValue = $ChannelMessage.content.SubString(9,($ChannelMessage.content.Length)-9)
-            $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP
-            $prop = $IPLookup | get-member -MemberType NoteProperty
-            $prop | ForEach-Object -Begin {$string = ""} -Process  { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n"}
-            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
-        }) : $null
+        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9, ($ChannelMessage.content.Length) - 9) -match $RegexTable['ip4address'] ? (& {
+                $LookupValue = $ChannelMessage.content.SubString(9, ($ChannelMessage.content.Length) - 9)
+                $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP
+                $prop = $IPLookup | get-member -MemberType NoteProperty
+                $prop | ForEach-Object -Begin { $string = "" } -Process { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n" }
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
+            }) : $null
 
     }
     catch {
@@ -118,7 +118,7 @@ function Send-DiscordWebSocketData {
         $Message = $Data | ConvertTo-Json
         $Array = @()
         $Message.ToCharArray() | ForEach-Object { $Array += [byte]$_ }
-        $Message = New-Object System.ArraySegment[byte]  -ArgumentList @(,$Array)
+        $Message = New-Object System.ArraySegment[byte]  -ArgumentList @(, $Array)
         $Conn = $WS.SendAsync($Message, [System.Net.WebSockets.WebSocketMessageType]::Text, [System.Boolean]::TrueString, $CT)
         while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 50 }
         $success = $true
@@ -127,14 +127,13 @@ function Send-DiscordWebSocketData {
     catch {
         Write-Error "Send-DiscordWebSocketData error: $($PSItem.Exception.Message)"
     }
-    $msg = if($success){"Sent"}else{"SendFailed"}
-    return ($Data | Select-Object @{N="SentOrRecvd";E={$msg}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}})
+    $msg = if ($success) { "Sent" }else { "SendFailed" }
+    return ($Data | Select-Object @{N = "SentOrRecvd"; E = { $msg } }, @{N = "EventName"; E = { $_.t } }, @{N = "SequenceNumber"; E = { $_.s } }, @{N = "Opcode"; E = { $_.op } }, @{N = "Data"; E = { $_.d } })
 
 }
 
 # Discord needs regular heartbeat to keep the websocket connected. Could use simplifying
-function Send-DiscordHeartbeat
-{
+function Send-DiscordHeartbeat {
     [cmdletbinding()]
     #param( $SequenceNumber = $null )
     param( [int]$SequenceNumber = $SequenceNumber -is [int] -and $SequenceNumber -eq 0 ? ((Remove-Variable SequenceNumber -ErrorAction SilentlyContinue) && $null) : $SequenceNumber -isnot [int] -and $null -ne $SequenceNumber ? [int]$SequenceNumber : $SequenceNumber )
@@ -147,30 +146,29 @@ function Send-DiscordHeartbeat
 
 # I am not entirely sure how it works but it did.
 # More info: https://discord.com/developers/docs/topics/gateway#gateway-intents
-function Send-DiscordAuthentication
-{
+function Send-DiscordAuthentication {
     [cmdletbinding()]
     param(
         [string]$Token,
         $Intents
     )
     $IntentsKeys = @{
-        'GUILDS' = 1 -shl 0
-        'GUILD_MEMBERS' = 1 -shl 1
-        'GUILD_BANS' = 1 -shl 2
+        'GUILDS'                    = 1 -shl 0
+        'GUILD_MEMBERS'             = 1 -shl 1
+        'GUILD_BANS'                = 1 -shl 2
         'GUILD_EMOJIS_AND_STICKERS' = 1 -shl 3
-        'GUILD_INTEGRATIONS' = 1 -shl 4
-        'GUILD_WEBHOOKS' = 1 -shl 5
-        'GUILD_INVITES' = 1 -shl 6
-        'GUILD_VOICE_STATES' = 1 -shl 7
-        'GUILD_PRESENCES' = 1 -shl 8
-        'GUILD_MESSAGES' = 1 -shl 9
-        'GUILD_MESSAGE_REACTIONS' = 1 -shl 10
-        'GUILD_MESSAGE_TYPING' = 1 -shl 11
-        'DIRECT_MESSAGES' = 1 -shl 12
-        'DIRECT_MESSAGE_REACTIONS' = 1 -shl 13
-        'DIRECT_MESSAGE_TYPING' = 1 -shl 14
-        'GUILD_SCHEDULED_EVENTS' = 1 -shl 16
+        'GUILD_INTEGRATIONS'        = 1 -shl 4
+        'GUILD_WEBHOOKS'            = 1 -shl 5
+        'GUILD_INVITES'             = 1 -shl 6
+        'GUILD_VOICE_STATES'        = 1 -shl 7
+        'GUILD_PRESENCES'           = 1 -shl 8
+        'GUILD_MESSAGES'            = 1 -shl 9
+        'GUILD_MESSAGE_REACTIONS'   = 1 -shl 10
+        'GUILD_MESSAGE_TYPING'      = 1 -shl 11
+        'DIRECT_MESSAGES'           = 1 -shl 12
+        'DIRECT_MESSAGE_REACTIONS'  = 1 -shl 13
+        'DIRECT_MESSAGE_TYPING'     = 1 -shl 14
+        'GUILD_SCHEDULED_EVENTS'    = 1 -shl 16
     }
 
     foreach ($key in $Intents) {
@@ -180,13 +178,13 @@ function Send-DiscordAuthentication
 
     $Prop = @{
         'op' = 2;
-        'd' = @{
-            'token' = $Token;
-            'intents' = [int]$IntentsCalculation;
+        'd'  = @{
+            'token'      = $Token;
+            'intents'    = [int]$IntentsCalculation;
             'properties' = @{
-                '$os' = 'windows';
+                '$os'      = 'windows';
                 '$browser' = 'pwshbot';
-                '$device' = 'pwshbot';
+                '$device'  = 'pwshbot';
             }
         }
     }
@@ -196,8 +194,7 @@ function Send-DiscordAuthentication
 }
 
 # used to simplify sending discord message in above script block
-function Send-DiscordMessage
-{
+function Send-DiscordMessage {
     [cmdletbinding()]
     param(
         $Token = $BotToken,
@@ -225,8 +222,8 @@ Write-Verbose "$($GatewaySession.url)"
 $WS = New-Object System.Net.WebSockets.ClientWebSocket  
 $CT = New-Object System.Threading.CancellationToken
 
-try{
-    do{
+try {
+    do {
         $Conn = $WS.ConnectAsync($GatewaySession.url, $CT)
         while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 100 }
         Write-Information "Connected to Web Socket."
@@ -235,17 +232,32 @@ try{
             #region misc-code
             $DiscordData = ""
             $Size = 512000
-            $Array = [byte[]] @(,0) * $Size
+            $Array = [byte[]] @(, 0) * $Size
         
-            $Recv = New-Object System.ArraySegment[byte] -ArgumentList @(,$Array)
+            $Recv = New-Object System.ArraySegment[byte] -ArgumentList @(, $Array)
             $Conn = $WS.ReceiveAsync($Recv, $CT) 
-            while (!$Conn.IsCompleted) { Start-Sleep -Milliseconds 100 }
+            while (!$Conn.IsCompleted) {
+                Start-Sleep -Milliseconds 100 
+                
+                <# 
+                1.25.2023 @huntsman95 - Moved heartbeat code to the idle loop as opcode 9 occurs when heartbeats aren't sent
+                and the code previously only ran on every websocket event causing opcode 9 on quiet servers.
+                #>
+                # Getting the time between when each heartbeat should be sent
+                $CurrentEpochMS = [int64]((New-TimeSpan -Start (Get-Date "01/01/1970") -End (Get-Date)).TotalMilliseconds)
+                if ($CurrentEpochMS -ge ($NextHeartbeat)) {
+                    Write-Verbose "Sending next heartbeat - $CurrentEpochMS >= $NextHeartbeat."
+                    if ($SequenceNumber -ge 1) { Send-DiscordHeartbeat -SequenceNumber $SequenceNumber | Out-Null } 
+                    else { Send-DiscordHeartbeat | Out-Null }
+                    $NextHeartbeat = (([int64]((New-TimeSpan -Start (Get-Date "01/01/1970") -End (Get-Date)).TotalMilliseconds)) + [int64]$HeartbeatInterval)
+                }
+            }
             $DiscordData = [System.Text.Encoding]::utf8.GetString($Recv.array)
         
             $LogStore += $DiscordData 
 
-            try { $RecvObj = $DiscordData | ConvertFrom-Json | Select-Object @{N="SentOrRecvd";E={"Received"}}, @{N="EventName";E={$_.t}}, @{N="SequenceNumber";E={$_.s}}, @{N="Opcode";E={$_.op}}, @{N="Data";E={$_.d}} }
-            catch {  Write-Error "ConvertFrom-Json failed $_.Exception"; Write-Host "Data: $RecvObj"; $RecvObj = $null;}
+            try { $RecvObj = $DiscordData | ConvertFrom-Json | Select-Object @{N = "SentOrRecvd"; E = { "Received" } }, @{N = "EventName"; E = { $_.t } }, @{N = "SequenceNumber"; E = { $_.s } }, @{N = "Opcode"; E = { $_.op } }, @{N = "Data"; E = { $_.d } } }
+            catch { Write-Error "ConvertFrom-Json failed $_.Exception"; Write-Host "Data: $RecvObj"; $RecvObj = $null; }
         
             # op code meanings are here: https://discord.com/developers/docs/topics/opcodes-and-status-codes#gateway-gateway-opcodes
             if ($RecvObj.Opcode -eq '10') {
@@ -262,27 +274,19 @@ try{
             # this is probably broken but the bot still works so eh
             if ([int]$RecvObj.SequenceNumber -eq 1) { 
                 $SequenceNumber = [int]$RecvObj.SequenceNumber 
-            } elseif ([int]$SequenceNumber -eq 1 -Or [int]$RecvObj.SequenceNumber -gt [int]$SequenceNumber) {  
+            }
+            elseif ([int]$SequenceNumber -eq 1 -Or [int]$RecvObj.SequenceNumber -gt [int]$SequenceNumber) {  
                 $SequenceNumber = [int]$RecvObj.SequenceNumber 
             }
 
-            # Getting the time between when each heartbeat should be sent
-            $CurrentEpochMS = [int64]((New-TimeSpan -Start (Get-Date "01/01/1970") -End (Get-Date)).TotalMilliseconds)
-            if($CurrentEpochMS -ge ($NextHeartbeat)) {
-                Write-Verbose "Sending next heartbeat - $CurrentEpochMS >= $NextHeartbeat."
-                if($SequenceNumber -ge 1) { Send-DiscordHeartbeat -SequenceNumber $SequenceNumber | Out-Null } 
-                else { Send-DiscordHeartbeat | Out-Null }
-                $NextHeartbeat = (([int64]((New-TimeSpan -Start (Get-Date "01/01/1970") -End (Get-Date)).TotalMilliseconds)) + [int64]$HeartbeatInterval)
-            }
-
-            if($RecvObj.Opcode -eq '11' -and $continueAuth -eq $true) {
+            if ($RecvObj.Opcode -eq '11' -and $continueAuth -eq $true) {
                 $continueAuth = $false
                 Write-Verbose "First ACK received. Attempting authentication."
                 Send-DiscordAuthentication -Token $BotToken -Intents $BotIntents | Out-Null #| Format-Table
                 Write-Information "Successfully authenticated to Discord Gateway."
             }
-            # opcode 9 is invalid session. Not sure how to stop this from regularly occuring
-            if($RecvObj.Opcode -eq '9') { 
+            # opcode 9 is invalid session; attempt to reauthenticate.
+            if ($RecvObj.Opcode -eq '9') { 
                 Write-Warning "Session invalidated from opcode 9 received. Reauthenticating..."
                 Send-DiscordAuthentication -Token $BotToken -Intents $BotIntents | Out-Null #| Format-Table 
                 Write-Information "Successfully authenticated to Discord Gateway."
@@ -294,7 +298,8 @@ try{
 
         }
     } until (!$Conn)
-} finally {
+}
+finally {
     if ($WS) { Write-Information "Closing websocket"; $WS.Dispose() }
 }
 #endregion code
