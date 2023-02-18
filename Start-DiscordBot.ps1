@@ -44,7 +44,7 @@ $Script = {
     # These try/catch/finally things are for error handling. More info: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_try_catch_finally?view=powershell-7.2
     try {
         # Instead of if statements we are using the ternery operator for either worse or simpler code idk. Info here: https://docs.microsoft.com/en-us/powershell/scripting/whats-new/what-s-new-in-powershell-70?view=powershell-7.2#ternary-operator
-        $ChannelMessage.content -like 'hi*' -or $ChannelMessage.content -like 'hello*' ? ( 
+        $ChannelMessage.content -like 'hi *' -or $ChannelMessage.content -like 'hello *' -or $ChannelMessage.content -eq 'hi' -or $ChannelMessage.content -eq 'hello' ? ( 
             Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "Hi $($ChannelMessage.author.username)" 
         ) : $null
 
