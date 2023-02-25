@@ -1,35 +1,47 @@
-# This is a discord bot made in powershell
-# This script requires PowerShell 7.0 minimum. I used 7.2. 5.0 which comes with windows is not good enough
-# Download here: https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.2#installing-the-msi-package
-
-# Put in your Bot token
-# You can get one here: https://discord.com/developers/applications
-# Don't leak your bot token
-$BotToken = ""
-
-# Put in YOUR bot id or it will try to respond to itself
-$BotId = ""
-
-# Choose your intent permissions: https://discord.com/developers/docs/topics/gateway#gateway-intents
-# Below chosen allows the bot to receive direct messages and discord server messages
-# WARNING: This may not work anymore. I believe there have been recent changes in how gateway intents work.
-$BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
-
-$RegexTable = @{
-    'domain'     = "^((?!-))(xn--)?[a-z0-9][a-z0-9-_]{0,61}[a-z0-9]{0,1}\.(xn--)?([a-z0-9\-]{1,61}|[a-z0-9-]{1,30}\.[a-z]{2,})$"
-    'ip4address' = "^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$"
-}
-
-$Headers = @{
-    "Authorization" = "Bot $BotToken"
-    "User-Agent"    = "PSDCBot (blabla, v0.1)"
-}
+<#
+.SYNOPSIS
+    This is a discord bot made in powershell
+.DESCRIPTION
+    This is a discord bot made in powershell
+.EXAMPLE
+    .\Invoke-DiscordBot.ps1
+.NOTES
+    This script requires PowerShell 7.0 minimum. I used 7.2. 5.0 which comes with windows is not good enough
+    Download here: https://docs.microsoft.com/en-us/powershell/scripting/install/installing-powershell-on-windows?view=powershell-7.2#installing-the-msi-package
+    Bot code Github repository: https://github.com/1-chris/Powershell-Discord-Bot
+    Get a bot token here: https://discord.com/developers/applications
+    Choose your intent permissions: https://discord.com/developers/docs/topics/gateway#gateway-intents
+    Set Bot IDs, tokens etc within the Setup scripts
+#>
 
 # Various powershell preference settings useful for debugging and decluttering as needed
 $InformationPreference = 'Continue'
 $WarningPreference = 'Continue'
 $VerbosePreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Continue'
+
+$SetupScripts = Get-ChildItem $PSScriptRoot/Live/Setup/*.ps1
+$LogicScripts = Get-ChildItem $PSScriptRoot/Live/Logic/*.ps1
+$UnprefixedScripts = Get-ChildItem $PSScriptRoot/Live/Unprefixed/*.ps1
+
+# Run setup scripts
+if (-not (Test-Path $PSScriptRoot/Inactive/)) {
+    New-Item -ItemType Directory -Path $PSScriptRoot/Inactive/Logic
+    New-Item -ItemType Directory -Path $PSScriptRoot/Inactive/Unprefixed
+}
+
+foreach ($SetupScript in $SetupScripts) {
+    Write-Host "Running setup script $($SetupScript.Name)"
+    . $SetupScript.FullName
+}
+
+# Below chosen allows the bot to receive direct messages and discord server messages
+$BotIntents = @('DIRECT_MESSAGES', 'GUILD_MESSAGES')
+
+$Headers = @{
+    "Authorization" = "Bot $BotToken"
+    "User-Agent"    = "PSDCBot (blabla, v0.2)"
+}
 
 # Actual bot logic goes here inside $script={}. This is a script block which is called in the main loop.
 # More info about script blocks: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_script_blocks?view=powershell-7.2
@@ -43,53 +55,58 @@ $Script = {
     
     # These try/catch/finally things are for error handling. More info: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_try_catch_finally?view=powershell-7.2
     try {
-        # Instead of if statements we are using the ternery operator for either worse or simpler code idk. Info here: https://docs.microsoft.com/en-us/powershell/scripting/whats-new/what-s-new-in-powershell-70?view=powershell-7.2#ternary-operator
-        $ChannelMessage.content -like 'hi *' -or $ChannelMessage.content -like 'hello *' -or $ChannelMessage.content -eq 'hi' -or $ChannelMessage.content -eq 'hello' ? ( 
+
+        # Logic scripts run when channel message content is prefixed with the bot command prefix
+        if ($ChannelMessage.content -like "$BotCommandPrefix*") {
+            # Trim the command prefix off the message content, which could be multiple chars and run the logic scripts
+            $ChannelMessage.content = $ChannelMessage.content.SubString($BotCommandPrefix.Length, ($ChannelMessage.content.Length) - $BotCommandPrefix.Length)
+
+            foreach ($LogicScript in $LogicScripts) {
+               . $LogicScript.FullName -ChannelMessage $ChannelMessage
+            }
+
+            # Enable/disable scripts on the fly
+            if ($ChannelMessage.content -like "enableprefix *" -and $ChannelMessage.author.id -eq $BotOwner) {
+                $result = Enable-PrefixedModule -Name $ChannelMessage.content.Split(" ")[1]
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content $result
+            }
+            if ($ChannelMessage.content -like "disableprefix *" -and $ChannelMessage.author.id -eq $BotOwner) {
+                $result = Disable-PrefixedModule -Name $ChannelMessage.content.Split(" ")[1]
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content $result
+            }
+            if ($ChannelMessage.content -like "enableunprefixed *" -and $ChannelMessage.author.id -eq $BotOwner) {
+                $result = Enable-UnprefixedModule -Name $ChannelMessage.content.Split(" ")[1]
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content $result
+            }
+            if ($ChannelMessage.content -like "disableunprefixed *" -and $ChannelMessage.author.id -eq $BotOwner) {
+                $result = Disable-UnprefixedModule -Name $ChannelMessage.content.Split(" ")[1]
+                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content $result
+            }
+        }
+
+        # Unprefixed scripts always run when a channel message is received
+        foreach ($UnprefixedScript in $UnprefixedScripts) {
+            . $UnprefixedScript.FullName -ChannelMessage $ChannelMessage
+        }
+        
+        # You can remove this if you don't want the bot to respond to "hi" or "hello"
+        if ($ChannelMessage.content -like 'hi *' -or $ChannelMessage.content -like 'hello *' -or $ChannelMessage.content -eq 'hi' -or $ChannelMessage.content -eq 'hello')
+        {
             Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "Hi $($ChannelMessage.author.username)" 
-        ) : $null
-
-        $ChannelMessage.content -like '*burger*' ? ( 
-            Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "I like burgers.`nMmmmm!" 
-        ) : $null
-
-        # This function-thingy looks up ip addresses from domain names
-        $ChannelMessage.content -like 'lookup *' -and $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length) - 7) -match $RegexTable['domain'] ? (& {
-                $LookupValue = $ChannelMessage.content.SubString(7, ($ChannelMessage.content.Length) - 7) 
-                $IPAddresses = (Get-IPInfo -IPAddress (Resolve-DnsName -Name $LookupValue -Type A_AAAA -DnsOnly -ErrorAction STOP).IPAddress) | Select-Object query, country, isp
-                $IPAddresses | ForEach-Object -Begin { $string = "" } -Process { $string += "`tIP: $($_.query) Country: $($_.country) ISP: $($_.isp)`n" }
-                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
-            }) : $null
-
-        # this thingy looks up ip addresses using ip-api.com free api. See below function Get-IPInfo which is in this script to see how it works
-        $ChannelMessage.content -like 'lookupip *' -and $ChannelMessage.content.SubString(9, ($ChannelMessage.content.Length) - 9) -match $RegexTable['ip4address'] ? (& {
-                $LookupValue = $ChannelMessage.content.SubString(9, ($ChannelMessage.content.Length) - 9)
-                $IPLookup = Get-IPInfo -IPAddress $LookupValue -ErrorAction STOP
-                $prop = $IPLookup | get-member -MemberType NoteProperty
-                $prop | ForEach-Object -Begin { $string = "" } -Process { $string += "`t$($_.Name): $($IPLookup."$($_.Name)")`n" }
-                Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$LookupValue results:`n$string"
-            }) : $null
+        }
 
     }
     catch {
-        Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "An error occurred :(((( thanks so much $($ChannelMessage.author.username). Error: $($PSItem.Exception.Message)"
+        Write-Host "$($PSItem.Exception.Message)"
+        Send-DiscordMessage -ChannelId $ChannelMessage.channel_id -Content "$($ChannelMessage.author.username) caused an error! 😭. Error: $($PSItem.Exception.Message)"
     }
     finally {
         $Error.Clear()
     }
 }
 
-function Get-IPInfo {
-    [cmdletbinding()]
-    param( $IPAddress )
-    $Collection = @()
 
-    foreach ($ip in $IPAddress) {
-        $Collection += Invoke-RestMethod -Uri "http://ip-api.com/json/$ip"
-        Start-Sleep -Milliseconds 100
-    }
-    # this returns a collection because it can get multiple ip addresses at same time from "lookup domain" bot command
-    return $Collection
-}
+
 
 function Write-ChatMessage {
     [cmdletbinding()]
@@ -99,9 +116,10 @@ function Write-ChatMessage {
     $Username = $ChannelMessage.author.username
     $UserId = $ChannelMessage.author.id
     $Content = $ChannelMessage.content -Replace "`n", " "
+    $ChannelId = $ChannelMessage.channel_id
     
     if ((-not [string]::IsNullOrEmpty($ChannelMessage.content)) -Or (-not [string]::IsNullOrWhiteSpace($ChannelMessage.content))) {
-        Write-Host -NoNewLine -ForegroundColor Magenta "<$Timestamp - $Username $UserId> "
+        Write-Host -NoNewLine -ForegroundColor Magenta "<$Timestamp - $Username $UserId $ChannelId> "
         Write-Host -NoNewLine -ForegroundColor White "$Content`n"
     }
 }
@@ -205,9 +223,40 @@ function Send-DiscordMessage {
     $Body = @{
         "content" = "$Content"
     }
+
+    $Body.content = $Body.content.Replace($BotToken, "")
     # this uses rest api instead of gateway to create new messages
     # more info: https://discord.com/developers/docs/resources/channel#create-message
     Invoke-RestMethod -Method POST -Uri "https://discord.com/api/v9/channels/$ChannelId/messages" -Headers $Headers -Body $Body | Out-Null # out-null at the end here just means discard whatever is being returned
+}
+
+function Send-DiscordMessageWithFile {
+    [cmdletbinding()]
+    param(
+        $Token = $BotToken,
+        $ChannelId,
+        [string]$FilePath
+    )
+
+    # Thanks to https://stackoverflow.com/questions/68677742/multipart-form-data-file-upload-with-powershell
+
+    $FileName = Split-Path $FilePath -Leaf
+    $boundary = [System.Guid]::NewGuid().ToString()
+    $TheFile = [System.IO.File]::ReadAllBytes($FilePath)
+    $TheFileContent = [System.Text.Encoding]::GetEncoding('iso-8859-1').GetString($TheFile)
+    
+    $bodyLines = (
+        "--$boundary",
+        "Content-Disposition: form-data; name=`"Description`"`r`n",
+        "File uploaded by PowerShell Discord Bot",
+        "--$boundary",
+        "Content-Disposition: form-data; name=`"TheFile`"; filename=`"$FileName`"",
+        "Content-Type: application/json`r`n",
+        $TheFileContent,
+        "--$boundary--`r`n"
+    ) -join "`r`n"
+
+    Invoke-RestMethod -Uri "https://discord.com/api/v9/channels/$ChannelId/messages" -Method POST -ContentType "multipart/form-data; boundary=`"$boundary`"" -Body $bodyLines -Headers $Headers
 }
 
 # these regions are useful for collapsing code in VS code and probably other editors
