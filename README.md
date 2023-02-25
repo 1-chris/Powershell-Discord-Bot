@@ -3,6 +3,7 @@
 ## Description
 A PowerShell Discord bot that can be used to run PowerShell commands and scripts.
 
+For a more simple bot in 1 file, you can browse this previous commit: https://github.com/1-chris/Powershell-Discord-Bot/tree/67d04b6e9854ccb84fabfaacfadc542be13e52ae
 
 ## Requirements
 - Tested with PowerShell 7.x
