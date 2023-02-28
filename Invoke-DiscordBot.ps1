@@ -302,8 +302,6 @@ try {
                 }
             }
             $DiscordData = [System.Text.Encoding]::utf8.GetString($Recv.array)
-        
-            $LogStore += $DiscordData 
 
             try { $RecvObj = $DiscordData | ConvertFrom-Json | Select-Object @{N = "SentOrRecvd"; E = { "Received" } }, @{N = "EventName"; E = { $_.t } }, @{N = "SequenceNumber"; E = { $_.s } }, @{N = "Opcode"; E = { $_.op } }, @{N = "Data"; E = { $_.d } } }
             catch { Write-Error "ConvertFrom-Json failed $_.Exception"; Write-Host "Data: $RecvObj"; $RecvObj = $null; }
